@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: document-mgmt-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    networks:
+      - document-mgmt-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: document-mgmt-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - document-mgmt-network
+    restart: unless-stopped
+
+networks:
+  document-mgmt-network:
+    driver: bridge
