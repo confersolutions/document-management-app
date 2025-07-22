@@ -17,19 +17,133 @@ import PyPDF2
 from docx import Document
 import openpyxl
 import markdown
+import requests
 
 indexes_storage = {}
 documents_storage = {}
 
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
 
+class CustomQdrantClient:
+    """Custom Qdrant client that uses HTTP requests instead of the Qdrant client library"""
+    
+    def __init__(self, url: str, api_key: Optional[str] = None):
+        self.base_url = url.rstrip('/')
+        self.headers = {'Content-Type': 'application/json'}
+        if api_key:
+            self.headers['api-key'] = api_key
+    
+    def get_collections(self):
+        """Get all collections"""
+        response = requests.get(f"{self.base_url}/collections", headers=self.headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Create a mock collections object that matches the Qdrant client interface
+        class MockCollections:
+            def __init__(self, collections_data):
+                self.collections = []
+                for col in collections_data.get('result', {}).get('collections', []):
+                    class MockCollection:
+                        def __init__(self, name):
+                            self.name = name
+                    self.collections.append(MockCollection(col['name']))
+        
+        return MockCollections(data)
+    
+    def get_collection(self, collection_name: str):
+        """Get a specific collection"""
+        response = requests.get(f"{self.base_url}/collections/{collection_name}", headers=self.headers, timeout=10)
+        if response.status_code == 404:
+            raise Exception(f"Collection {collection_name} not found")
+        response.raise_for_status()
+        return response.json()
+    
+    def create_collection(self, collection_name: str, vectors_config):
+        """Create a new collection"""
+        payload = {
+            "vectors": {
+                "size": vectors_config.size,
+                "distance": vectors_config.distance.value
+            }
+        }
+        response = requests.put(f"{self.base_url}/collections/{collection_name}", 
+                              headers=self.headers, json=payload, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    
+    def upsert(self, collection_name: str, points):
+        """Upsert points to a collection"""
+        payload = {
+            "points": [
+                {
+                    "id": point.id,
+                    "vector": point.vector,
+                    "payload": point.payload
+                } for point in points
+            ]
+        }
+        response = requests.put(f"{self.base_url}/collections/{collection_name}/points", 
+                              headers=self.headers, json=payload, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    
+    def search(self, collection_name: str, query_vector, limit=10):
+        """Search for similar vectors"""
+        payload = {
+            "vector": query_vector,
+            "limit": limit
+        }
+        response = requests.post(f"{self.base_url}/collections/{collection_name}/points/search", 
+                               headers=self.headers, json=payload, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Create mock search results that match the Qdrant client interface
+        class MockSearchResult:
+            def __init__(self, result_data):
+                self.id = result_data['id']
+                self.score = result_data['score']
+                self.payload = result_data.get('payload', {})
+        
+        return [MockSearchResult(result) for result in data.get('result', [])]
+    
+    def delete_collection(self, collection_name: str):
+        """Delete a collection"""
+        response = requests.delete(f"{self.base_url}/collections/{collection_name}", 
+                                 headers=self.headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
+
 def get_qdrant_client(url: str, api_key: Optional[str] = None):
     """Create Qdrant client with provided connection parameters"""
     try:
+        # Ensure URL has the correct format
+        if not url.startswith(('http://', 'https://')):
+            url = f"https://{url}"
+        
+        # Remove any trailing slashes
+        url = url.rstrip('/')
+        
+        # Test the connection using HTTP requests (like curl)
+        headers = {'Content-Type': 'application/json'}
         if api_key:
-            return QdrantClient(url=url, api_key=api_key)
-        else:
-            return QdrantClient(url=url)
+            headers['api-key'] = api_key
+        
+        # Test the collections endpoint directly
+        test_url = f"{url}/collections"
+        
+        response = requests.get(test_url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"HTTP connection failed: {response.text}")
+        
+        # Use our custom client instead of the problematic Qdrant client
+        client = CustomQdrantClient(url, api_key)
+        
+        # Test the connection by getting collections
+        collections = client.get_collections()
+        
+        return client
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to connect to Qdrant: {str(e)}")
 
