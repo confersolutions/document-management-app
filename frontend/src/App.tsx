@@ -45,8 +45,8 @@ function App() {
   const [success, setSuccess] = useState<string>('')
   const [activeTab, setActiveTab] = useState('upload')
   const [qdrantConnection, setQdrantConnection] = useState({
-    url: '',
-    apiKey: '',
+    url: 'https://qdrant.confersolutions.ai',
+    apiKey: 'yKRi9yNg0lT65Jy74iPQmd44pX4HGpaU',
     isConnected: false,
     collections: []
   })
@@ -67,8 +67,14 @@ function App() {
     fetchIndexes()
   }, [])
 
+  // Debug useEffect to monitor qdrantConnection state changes
+  useEffect(() => {
+    console.log('🔄 qdrantConnection state changed:', qdrantConnection)
+  }, [qdrantConnection])
+
   const testQdrantConnection = async () => {
     try {
+      console.log('🔗 Starting Qdrant connection test...')
       setIsUploading(true)
       const response = await fetch(`${API_URL}/qdrant/test-connection`, {
         method: 'POST',
@@ -80,15 +86,23 @@ function App() {
       })
       
       if (response.ok) {
+        console.log('✅ Connection test successful, fetching collections...')
         await fetchCollections()
-        setQdrantConnection({...qdrantConnection, isConnected: true})
+        console.log('🔄 Setting connection state to connected...')
+        setQdrantConnection(prev => {
+          const newState = {...prev, isConnected: true}
+          console.log('📊 Updated qdrantConnection state:', newState)
+          return newState
+        })
         setSuccess('Connected to Qdrant successfully!')
         setError('')
       } else {
+        console.error('❌ Connection test failed:', response.status, response.statusText)
         setError('Failed to connect to Qdrant')
         setSuccess('')
       }
     } catch (error) {
+      console.error('❌ Connection test error:', error)
       setError('Failed to connect to Qdrant')
       setSuccess('')
     } finally {
@@ -98,6 +112,7 @@ function App() {
 
   const fetchCollections = async () => {
     try {
+      console.log('Fetching collections...')
       const response = await fetch(`${API_URL}/qdrant/collections`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -109,7 +124,14 @@ function App() {
       
       if (response.ok) {
         const data = await response.json()
-        setQdrantConnection(prev => ({...prev, collections: data.collections}))
+        console.log('Collections received:', data.collections)
+        setQdrantConnection(prev => {
+          const newState = {...prev, collections: data.collections}
+          console.log('Updated qdrantConnection state:', newState)
+          return newState
+        })
+      } else {
+        console.error('Failed to fetch collections:', response.status, response.statusText)
       }
     } catch (error) {
       console.error('Error fetching collections:', error)
@@ -279,13 +301,13 @@ function App() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <Input
               type="url"
-              placeholder="Qdrant URL (e.g., http://localhost:6333)"
+              placeholder="Qdrant URL (pre-filled with default)"
               value={qdrantConnection.url}
               onChange={(e) => setQdrantConnection({...qdrantConnection, url: e.target.value})}
             />
             <Input
               type="password"
-              placeholder="API Key (optional)"
+              placeholder="API Key (pre-filled with default)"
               value={qdrantConnection.apiKey}
               onChange={(e) => setQdrantConnection({...qdrantConnection, apiKey: e.target.value})}
             />
@@ -295,7 +317,7 @@ function App() {
             disabled={!qdrantConnection.url || isUploading}
             className="mr-4"
           >
-            {isUploading ? 'Connecting...' : (qdrantConnection.isConnected ? 'Reconnect' : 'Connect')}
+            {isUploading ? 'Connecting...' : (qdrantConnection.isConnected ? 'Reconnect' : 'Connect to Qdrant')}
           </Button>
           {qdrantConnection.isConnected && (
             <span className="text-green-600 font-medium">✓ Connected</span>
@@ -341,9 +363,12 @@ function App() {
                           <SelectValue placeholder="Select Collection" />
                         </SelectTrigger>
                         <SelectContent>
-                          {qdrantConnection.collections.map(collection => (
-                            <SelectItem key={collection} value={collection}>{collection}</SelectItem>
-                          ))}
+                          {(() => {
+                            console.log('Rendering collections dropdown, collections:', qdrantConnection.collections)
+                            return qdrantConnection.collections.map(collection => (
+                              <SelectItem key={collection} value={collection}>{collection}</SelectItem>
+                            ))
+                          })()}
                           <SelectItem value="__create_new__">Create New Collection</SelectItem>
                         </SelectContent>
                       </Select>
