@@ -53,9 +53,9 @@ docker-compose up --build
 ```
 
 5. Access the application:
-   - Frontend: http://localhost
-   - Backend API: http://localhost:8000
-   - API Documentation: http://localhost:8000/docs
+   - Frontend: http://localhost:3001
+   - Backend API: http://localhost:8001
+   - API Documentation: http://localhost:8001/docs
 
 ### Using the Application
 
@@ -96,8 +96,8 @@ git push -u origin main
 
 3. **Deploy**:
    - Coolify will automatically build and deploy both services
-   - Frontend will be available on port 80
-   - Backend will be available on port 8000
+   - Frontend will be available on port 3001
+   - Backend will be available on port 8001
 
 ### Environment Variables for Production
 
